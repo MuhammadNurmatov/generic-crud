@@ -4,6 +4,7 @@ import (
 	"baserepo/repository"
 	"context"
 
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 	"gorm.io/gorm"
 )
@@ -19,7 +20,8 @@ type useRepositoryExample struct {
 	tracer trace.Tracer
 }
 
-func NewUseRepositoryExample(db *gorm.DB, tracer trace.Tracer) UseRepositoryExample {
+func NewUseRepositoryExample(db *gorm.DB) UseRepositoryExample {
+	tracer := otel.Tracer("use-repository-example")
 	generic := repository.NewRepository[UserExample](db, tracer)
 	return &useRepositoryExample{
 		Repository: generic,
