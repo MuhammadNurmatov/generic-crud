@@ -12,13 +12,12 @@ import (
 type Repository[T any] interface {
 	Create(ctx context.Context, entity *T) (*T, error)
 	Update(ctx context.Context, entity *T, params any) (*T, error)
-	UpdateBy(ctx context.Context, entity *T, condition any, params any) (*T, error)
 	Save(ctx context.Context, entity *T) (*T, error)
-	GetFirstByID(ctx context.Context, id int) (T, error)
+	GetFirstByID(ctx context.Context, ID any) (*T, error)
 	GetFirstBy(ctx context.Context, condition any, sort string) (*T, error)
 	GetAll(ctx context.Context, limit, offset int, sort string) ([]*T, int64, error)
 	GetAllBy(ctx context.Context, limit, offset int, condition any, sort string) ([]*T, int64, error)
-	Delete(ctx context.Context, entity *T, ID any) error
+	Delete(ctx context.Context, ID any) error
 }
 
 type repository[T any] struct {
@@ -64,21 +63,6 @@ func (r *repository[T]) Update(ctx context.Context, entity *T, params any) (*T, 
 	return entity, nil
 }
 
-func (r *repository[T]) UpdateBy(ctx context.Context, entity *T, condition any, params any) (*T, error) {
-	ctx, span := r.tracer.Start(ctx, "repository.UpdateBy")
-	defer span.End()
-
-	addEvent(span, "Updating entity by condition")
-
-	if err := r.db.WithContext(ctx).Model(entity).Where(condition).Updates(params).Error; err != nil {
-		span.RecordError(err)
-		return nil, err
-	}
-
-	addEvent(span, "Entity updated successfully")
-	return entity, nil
-}
-
 func (r *repository[T]) Save(ctx context.Context, entity *T) (*T, error) {
 	ctx, span := r.tracer.Start(ctx, "repository.Save")
 	defer span.End()
@@ -94,20 +78,20 @@ func (r *repository[T]) Save(ctx context.Context, entity *T) (*T, error) {
 	return entity, nil
 }
 
-func (r *repository[T]) GetFirstByID(ctx context.Context, id int) (T, error) {
+func (r *repository[T]) GetFirstByID(ctx context.Context, ID any) (*T, error) {
 	ctx, span := r.tracer.Start(ctx, "repository.GetFirstByID")
 	defer span.End()
 
-	addEvent(span, "Getting entity by ID", attribute.Int("entity.id", id))
+	addEvent(span, "Getting entity by ID")
 
-	var item T
-	if err := r.db.WithContext(ctx).First(&item, id).Error; err != nil {
+	entity := new(T)
+	if err := r.db.WithContext(ctx).First(entity, ID).Error; err != nil {
 		span.RecordError(err)
-		return item, err
+		return entity, err
 	}
 
 	addEvent(span, "Entity retrieved successfully")
-	return item, nil
+	return entity, nil
 }
 
 func (r *repository[T]) GetFirstBy(ctx context.Context, condition any, sort string) (*T, error) {
@@ -116,14 +100,15 @@ func (r *repository[T]) GetFirstBy(ctx context.Context, condition any, sort stri
 
 	addEvent(span, "Getting first entity by condition")
 
-	var entity T
-	if err := r.db.WithContext(ctx).Where(condition).Order(sort).First(&entity).Error; err != nil {
+	entity := new(T)
+
+	if err := r.db.WithContext(ctx).Where(condition).Order(sort).First(entity).Error; err != nil {
 		span.RecordError(err)
-		return nil, err
+		return entity, err
 	}
 
 	addEvent(span, "Entity retrieved successfully")
-	return &entity, nil
+	return entity, nil
 }
 
 func (r *repository[T]) GetAll(ctx context.Context, limit, offset int, sort string) ([]*T, int64, error) {
@@ -133,7 +118,9 @@ func (r *repository[T]) GetAll(ctx context.Context, limit, offset int, sort stri
 	addEvent(span, "Getting all entities")
 
 	var total int64
-	if err := r.db.WithContext(ctx).Model(new(T)).Count(&total).Error; err != nil {
+	entity := new(T)
+
+	if err := r.db.WithContext(ctx).Model(entity).Count(&total).Error; err != nil {
 		span.RecordError(err)
 		return nil, 0, err
 	}
@@ -155,7 +142,9 @@ func (r *repository[T]) GetAllBy(ctx context.Context, limit, offset int, conditi
 	addEvent(span, "Getting all entities by condition")
 
 	var total int64
-	if err := r.db.WithContext(ctx).Model(new(T)).Where(condition).Count(&total).Error; err != nil {
+	entity := new(T)
+
+	if err := r.db.WithContext(ctx).Model(entity).Where(condition).Count(&total).Error; err != nil {
 		span.RecordError(err)
 		return nil, 0, err
 	}
@@ -170,12 +159,13 @@ func (r *repository[T]) GetAllBy(ctx context.Context, limit, offset int, conditi
 	return items, total, nil
 }
 
-func (r *repository[T]) Delete(ctx context.Context, entity *T, ID any) error {
+func (r *repository[T]) Delete(ctx context.Context, ID any) error {
 	ctx, span := r.tracer.Start(ctx, "repository.Delete")
 	defer span.End()
 
 	addEvent(span, "Deleting entity", attribute.String("entity.id", fmt.Sprintf("%v", ID)))
 
+	var entity T
 	if err := r.db.WithContext(ctx).Delete(entity, ID).Error; err != nil {
 		span.RecordError(err)
 		return err
